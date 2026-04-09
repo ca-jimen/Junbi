@@ -6,11 +6,18 @@ import AppScannerModal from "./AppScannerModal";
 export default function SettingsView({ modes, onSave }) {
   const [localModes, setLocalModes] = useState(modes);
   const [expandedId, setExpandedId] = useState(null);
+  const [editingMode, setEditingMode] = useState(null);
   const [addAppForMode, setAddAppForMode] = useState(null);
   const [scanForMode, setScanForMode] = useState(null);
 
   function toggleExpand(id) {
     setExpandedId((prev) => (prev === id ? null : id));
+  }
+
+  function handleSaveMode(updated) {
+    const next = localModes.map((m) => (m.id === updated.id ? updated : m));
+    setLocalModes(next);
+    onSave(next);
   }
 
   function handleDeleteMode(modeId) {
@@ -55,6 +62,13 @@ export default function SettingsView({ modes, onSave }) {
               </span>
             </button>
             <button
+              onClick={() => setEditingMode(mode)}
+              className="shrink-0 text-white/20 hover:text-white transition-colors text-sm leading-none px-1"
+              title="Edit mode"
+            >
+              ✎
+            </button>
+            <button
               onClick={() => handleDeleteMode(mode.id)}
               className="shrink-0 text-white/20 hover:text-red-400 transition-colors text-xl leading-none"
               title="Delete mode"
@@ -94,6 +108,13 @@ export default function SettingsView({ modes, onSave }) {
         </div>
       ))}
 
+      {editingMode && (
+        <AddModeModal
+          mode={editingMode}
+          onSave={handleSaveMode}
+          onClose={() => setEditingMode(null)}
+        />
+      )}
       {addAppForMode && (
         <AddAppModal
           onAdd={(app) => handleAddApp(addAppForMode, app)}
