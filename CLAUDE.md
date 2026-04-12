@@ -29,9 +29,12 @@ cd src-tauri && cargo test
 
 # 3. Check frontend (must build with zero errors)
 npm run build
+
+# 4. Verify full app starts (run and interrupt once the window opens or Rust compilation succeeds)
+npm run tauri dev
 ```
 
-All three must pass cleanly. `cargo check` catches Rust type/compile errors. `cargo test` runs integration tests (including the OneDrive build-env guard). `npm run build` catches all JS/JSX errors.
+All four must pass cleanly. `cargo check` catches Rust type/compile errors. `cargo test` runs integration tests (including the OneDrive build-env guard). `npm run build` catches all JS/JSX errors. `npm run tauri dev` catches integration issues (missing cargo in PATH, Tauri config errors, etc.) — run it and confirm the window launches, then interrupt with Ctrl+C.
 
 ## Commands
 

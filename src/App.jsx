@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { getModes, saveModes } from "./store";
 import HomeView from "./components/HomeView";
 import SettingsView from "./components/SettingsView";
@@ -9,6 +11,7 @@ export default function App() {
   const [modes, setModes] = useState([]);
   const [showAddMode, setShowAddMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [pendingScanModeId, setPendingScanModeId] = useState(null);
 
   useEffect(() => {
     getModes().then((m) => {
@@ -25,6 +28,31 @@ export default function App() {
   async function handleAddMode(mode) {
     const updated = [...modes, mode];
     await handleSaveModes(updated);
+    setView("settings");
+    setPendingScanModeId(mode.id);
+  }
+
+  async function handleExport() {
+    const path = await save({
+      defaultPath: "junbi-modes.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!path) return;
+    await invoke("export_modes", { path, modes });
+  }
+
+  async function handleImport() {
+    const path = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (!path) return;
+    const imported = await invoke("import_modes", { path });
+    const merged = [
+      ...modes,
+      ...imported.map((m) => ({ ...m, id: crypto.randomUUID() })),
+    ];
+    await handleSaveModes(merged);
   }
 
   if (loading) {
@@ -56,12 +84,28 @@ export default function App() {
         </div>
         <div className="flex items-center gap-2">
           {view === "settings" && (
-            <button
-              onClick={() => setShowAddMode(true)}
-              className="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-3 py-1.5 transition-colors"
-            >
-              + Add Mode
-            </button>
+            <>
+              <button
+                onClick={handleImport}
+                className="rounded-lg bg-white/5 hover:bg-white/10 text-white/60 text-sm px-3 py-1.5 transition-colors"
+                title="Import modes from JSON"
+              >
+                Import
+              </button>
+              <button
+                onClick={handleExport}
+                className="rounded-lg bg-white/5 hover:bg-white/10 text-white/60 text-sm px-3 py-1.5 transition-colors"
+                title="Export modes to JSON"
+              >
+                Export
+              </button>
+              <button
+                onClick={() => setShowAddMode(true)}
+                className="rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-3 py-1.5 transition-colors"
+              >
+                + Add Mode
+              </button>
+            </>
           )}
           {view === "home" && (
             <button
@@ -76,11 +120,16 @@ export default function App() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col">
         {view === "home" ? (
-          <HomeView modes={modes} />
+          <HomeView modes={modes} onOpenSettings={() => { setView("settings"); setShowAddMode(true); }} />
         ) : (
-          <SettingsView modes={modes} onSave={handleSaveModes} />
+          <SettingsView
+            modes={modes}
+            onSave={handleSaveModes}
+            pendingScanModeId={pendingScanModeId}
+            onClearPendingScan={() => setPendingScanModeId(null)}
+          />
         )}
       </main>
 
