@@ -15,7 +15,9 @@ const ICON_CATEGORIES = [
 export default function AddModeModal({ onAdd, onSave, onClose, mode }) {
   const editing = Boolean(mode);
   const [name, setName] = useState(mode?.name ?? "");
+  const [description, setDescription] = useState(mode?.description ?? "");
   const [icon, setIcon] = useState(mode?.icon ?? "🎮");
+  const [hotkey, setHotkey] = useState(mode?.hotkey ?? "");
   const [apps, setApps] = useState(mode?.apps ?? []);
   const [showAddApp, setShowAddApp] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -43,9 +45,9 @@ export default function AddModeModal({ onAdd, onSave, onClose, mode }) {
     e.preventDefault();
     if (!name.trim()) return;
     if (editing) {
-      onSave({ ...mode, name: name.trim(), icon, apps });
+      onSave({ ...mode, name: name.trim(), icon, apps, description: description.trim(), hotkey: hotkey.trim() });
     } else {
-      onAdd({ id: crypto.randomUUID(), name: name.trim(), icon, apps: [] });
+      onAdd({ id: crypto.randomUUID(), name: name.trim(), icon, apps: [], description: description.trim(), hotkey: hotkey.trim() });
     }
     onClose();
   }
@@ -73,6 +75,24 @@ export default function AddModeModal({ onAdd, onSave, onClose, mode }) {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Creative"
                 className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-white/50 mb-1 block">Description</label>
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Optional — shown on the mode card"
+                className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-white/50 mb-1 block">Hotkey</label>
+              <input
+                value={hotkey}
+                onChange={(e) => setHotkey(e.target.value)}
+                placeholder="e.g. Ctrl+Shift+W — leave blank to disable"
+                className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-indigo-500 font-mono"
               />
             </div>
             <div>

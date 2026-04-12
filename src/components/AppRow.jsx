@@ -1,5 +1,11 @@
 import { useState } from "react";
 
+const BROWSER_NAMES = ["chrome", "chromium", "firefox", "safari", "edge", "brave", "opera", "vivaldi", "arc", "zen"];
+function isBrowser(path) {
+  if (!path) return false;
+  return BROWSER_NAMES.some((b) => path.toLowerCase().includes(b));
+}
+
 export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, invalid }) {
   const [expanded, setExpanded] = useState(false);
   const [urls, setUrls] = useState(app.args ?? []);
@@ -30,7 +36,14 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
     save(urls.filter((_, idx) => idx !== i));
   }
 
-  const urlCount = (app.args ?? []).length;
+  const argCount = (app.args ?? []).length;
+  const browser = isBrowser(app.path);
+  const argLabel = browser ? "URL" : "param";
+  const argLabelPlural = browser ? "URLs" : "params";
+  const argPlaceholder = browser ? "https://..." : "--flag or -arg";
+  const addLabel = browser
+    ? (urls.length === 0 ? "Add a tab URL" : "Add another tab")
+    : (urls.length === 0 ? "Add a parameter" : "Add another parameter");
 
   return (
     <div className={`rounded-lg overflow-hidden ${invalid ? "bg-red-500/10 border border-red-500/20" : "bg-white/5"}`}>
@@ -67,18 +80,18 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
           <p className="text-xs text-white/40 truncate">{app.path}</p>
         </div>
 
-        {/* URL toggle — show count if collapsed, hide label if expanded */}
+        {/* Args toggle — show count if collapsed, hide label if expanded */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           className="shrink-0 text-xs text-indigo-400/70 hover:text-indigo-300 transition-colors px-1"
-          title={expanded ? "Hide URLs" : "Edit URLs"}
+          title={expanded ? `Hide ${argLabelPlural}` : `Edit ${argLabelPlural}`}
         >
           {expanded
-            ? "hide URLs"
-            : urlCount > 0
-            ? `${urlCount} URL${urlCount !== 1 ? "s" : ""} ✎`
-            : "+ URLs"}
+            ? `hide ${argLabelPlural}`
+            : argCount > 0
+            ? `${argCount} ${argCount !== 1 ? argLabelPlural : argLabel} ✎`
+            : `+ ${argLabelPlural}`}
         </button>
 
         <button
@@ -91,7 +104,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
         </button>
       </div>
 
-      {/* Inline URL editor */}
+      {/* Inline args editor */}
       {expanded && (
         <div className="border-t border-white/5 px-4 pb-3 pt-2 flex flex-col gap-2">
           {urls.map((url, i) => (
@@ -100,7 +113,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
                 value={url}
                 onChange={(e) => updateUrl(i, e.target.value)}
                 onBlur={() => commitUrl(i)}
-                placeholder="https://..."
+                placeholder={argPlaceholder}
                 className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 text-white px-3 py-1.5 text-sm outline-none focus:border-indigo-500"
               />
               <button
@@ -118,7 +131,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
             className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/15 hover:border-indigo-500 text-white/30 hover:text-indigo-400 py-1.5 text-xs transition-colors"
           >
             <span className="text-sm leading-none">+</span>
-            <span>{urls.length === 0 ? "Add a tab URL" : "Add another tab"}</span>
+            <span>{addLabel}</span>
           </button>
         </div>
       )}

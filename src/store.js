@@ -31,3 +31,15 @@ export async function saveModes(modes) {
   await store.set("modes", modes);
   await store.save();
 }
+
+export async function getPreferences() {
+  const store = await getStore();
+  const prefs = await store.get("preferences");
+  return prefs ?? { hideOnLaunch: true, globalShortcut: "" };
+}
+
+export async function savePreferences(prefs) {
+  const store = await getStore();
+  await store.set("preferences", prefs);
+  await store.save();
+}

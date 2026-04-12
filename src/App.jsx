@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { getModes, saveModes } from "./store";
+import { getModes, saveModes, getPreferences, savePreferences } from "./store";
 import HomeView from "./components/HomeView";
 import SettingsView from "./components/SettingsView";
 import AddModeModal from "./components/AddModeModal";
@@ -9,20 +10,43 @@ import AddModeModal from "./components/AddModeModal";
 export default function App() {
   const [view, setView] = useState("home");
   const [modes, setModes] = useState([]);
+  const [preferences, setPreferences] = useState({ hideOnLaunch: true });
   const [showAddMode, setShowAddMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pendingScanModeId, setPendingScanModeId] = useState(null);
 
   useEffect(() => {
-    getModes().then((m) => {
+    Promise.all([getModes(), getPreferences()]).then(([m, p]) => {
       setModes(m);
+      setPreferences(p);
       setLoading(false);
     });
+  }, []);
+
+  // Refresh modes when the backend emits a modes-updated event
+  // (e.g. after usage_count / last_launched is updated on launch).
+  useEffect(() => {
+    let unlisten;
+    listen("modes-updated", () => {
+      getModes().then(setModes);
+    }).then((fn) => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
   }, []);
 
   async function handleSaveModes(updated) {
     setModes(updated);
     await saveModes(updated);
+  }
+
+  async function handleSavePreferences(updated) {
+    setPreferences(updated);
+    await savePreferences(updated);
+    // Keep the OS-level shortcut registration in sync whenever preferences change.
+    try {
+      await invoke("set_global_shortcut", { shortcut: updated.globalShortcut ?? "" });
+    } catch (_) {
+      // Best-effort — invalid shortcut strings are surfaced in the settings UI instead.
+    }
   }
 
   async function handleAddMode(mode) {
@@ -122,13 +146,15 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 overflow-y-auto flex flex-col">
         {view === "home" ? (
-          <HomeView modes={modes} onOpenSettings={() => { setView("settings"); setShowAddMode(true); }} />
+          <HomeView modes={modes} hideOnLaunch={preferences.hideOnLaunch} onOpenSettings={() => { setView("settings"); setShowAddMode(true); }} />
         ) : (
           <SettingsView
             modes={modes}
             onSave={handleSaveModes}
             pendingScanModeId={pendingScanModeId}
             onClearPendingScan={() => setPendingScanModeId(null)}
+            preferences={preferences}
+            onSavePreferences={handleSavePreferences}
           />
         )}
       </main>

@@ -94,38 +94,48 @@ export default function AddAppModal({ onAdd, onClose, modeName }) {
             </div>
           </div>
 
-          {/* URLs section */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-white/50">URLs to open in tabs</label>
-              <span className="text-xs text-white/20">optional</span>
-            </div>
-            {urls.map((url, i) => (
-              <div key={i} className="flex gap-2 mb-2">
-                <input
-                  value={url}
-                  onChange={(e) => updateUrl(i, e.target.value)}
-                  placeholder="https://..."
-                  className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
-                />
+          {/* URLs / launch parameters section */}
+          {(() => {
+            const browser = isBrowser(path);
+            const sectionLabel = browser ? "URLs to open in tabs" : "Launch parameters";
+            const placeholder = browser ? "https://..." : "--flag or -arg";
+            const addLabel = browser
+              ? (urls.length === 0 ? "Add a tab URL" : "Add another tab")
+              : (urls.length === 0 ? "Add a parameter" : "Add another parameter");
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs text-white/50">{sectionLabel}</label>
+                  <span className="text-xs text-white/20">optional</span>
+                </div>
+                {urls.map((url, i) => (
+                  <div key={i} className="flex gap-2 mb-2">
+                    <input
+                      value={url}
+                      onChange={(e) => updateUrl(i, e.target.value)}
+                      placeholder={placeholder}
+                      className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeUrl(i)}
+                      className="shrink-0 w-8 h-9 flex items-center justify-center text-white/30 hover:text-red-400 transition-colors text-lg leading-none"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
                 <button
                   type="button"
-                  onClick={() => removeUrl(i)}
-                  className="shrink-0 w-8 h-9 flex items-center justify-center text-white/30 hover:text-red-400 transition-colors text-lg leading-none"
+                  onClick={addUrl}
+                  className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/15 hover:border-indigo-500 text-white/30 hover:text-indigo-400 py-2 text-sm transition-colors"
                 >
-                  ×
+                  <span className="text-base leading-none">+</span>
+                  <span>{addLabel}</span>
                 </button>
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={addUrl}
-              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/15 hover:border-indigo-500 text-white/30 hover:text-indigo-400 py-2 text-sm transition-colors"
-            >
-              <span className="text-base leading-none">+</span>
-              <span>{urls.length === 0 ? "Add a tab URL" : "Add another tab"}</span>
-            </button>
-          </div>
+            );
+          })()}
 
           <div className="flex gap-3 mt-2">
             <button

@@ -1,4 +1,5 @@
-# On Windows with OneDrive, redirect build artifacts to avoid Windows Application Control
-# blocking compiled build scripts in cloud-synced directories:
-# [build]
-# target-dir = "C:/cargo-target/junbi"
+# Redirect build artifacts to a non-OneDrive path.
+# Windows Application Control blocks execution of compiled build scripts
+# in cloud-synced directories (OneDrive), so we build to a local path instead.
+[build]
+target-dir = "C:/cargo-target/junbi"
