@@ -23,6 +23,10 @@ const TRAY_ID: &str = "main-tray";
 /// determinable at launch time (e.g. macOS .app bundles via `open`).
 struct ActivePids(Mutex<HashMap<String, Vec<(u32, String)>>>);
 
+/// Caches base64 PNG data-URLs for app icons, keyed by app path.
+/// A stored `None` means the path was tried and no icon was found.
+struct IconCache(Mutex<HashMap<String, Option<String>>>);
+
 // ---------------------------------------------------------------------------
 // Data structures
 // ---------------------------------------------------------------------------
@@ -90,6 +94,81 @@ pub struct AppStopResult {
     pub name: String,
     pub stopped: bool,
 }
+
+/// Emitted once per app during `launch_mode` so the frontend can show
+/// real-time per-app progress while the mode is launching.
+#[derive(Serialize, Clone)]
+struct LaunchProgressPayload {
+    mode_id: String,
+    name: String,
+    /// "launched" | "skipped" | "failed"
+    status: String,
+    error: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// App icon extraction (macOS only)
+// ---------------------------------------------------------------------------
+
+/// Minimal base64 encoder — avoids adding an external crate.
+fn base64_encode(data: &[u8]) -> String {
+    const T: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    for c in data.chunks(3) {
+        let b0 = c[0] as u32;
+        let b1 = if c.len() > 1 { c[1] as u32 } else { 0 };
+        let b2 = if c.len() > 2 { c[2] as u32 } else { 0 };
+        let n = (b0 << 16) | (b1 << 8) | b2;
+        out.push(T[((n >> 18) & 63) as usize] as char);
+        out.push(T[((n >> 12) & 63) as usize] as char);
+        out.push(if c.len() > 1 { T[((n >> 6) & 63) as usize] as char } else { '=' });
+        out.push(if c.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+    }
+    out
+}
+
+#[cfg(target_os = "macos")]
+fn resolve_app_icon(app_path: &str) -> Option<String> {
+    use std::io::Read;
+    if !app_path.ends_with(".app") { return None; }
+
+    // Convert Info.plist to XML (handles both binary and XML formats).
+    let plist = format!("{}/Contents/Info.plist", app_path);
+    let xml_out = Command::new("plutil")
+        .args(["-convert", "xml1", "-o", "-", &plist])
+        .output().ok()?;
+    if !xml_out.status.success() { return None; }
+    let xml = String::from_utf8_lossy(&xml_out.stdout);
+
+    // Locate CFBundleIconFile value with a simple text scan.
+    let marker = "<key>CFBundleIconFile</key>";
+    let after = xml.split(marker).nth(1)?;
+    let s = after.find("<string>")? + "<string>".len();
+    let e = after[s..].find("</string>")?;
+    let icon_name = after[s..s + e].trim().to_string();
+    let stem = icon_name.trim_end_matches(".icns");
+
+    // Resolve the .icns path.
+    let resources = format!("{}/Contents/Resources", app_path);
+    let icns = format!("{}/{}.icns", resources, stem);
+    if !std::path::Path::new(&icns).exists() { return None; }
+
+    // Convert to 32×32 PNG with the system `sips` tool.
+    let tmp = format!("/tmp/junbi_icon_{}.png", std::process::id());
+    let ok = Command::new("sips")
+        .args(["-s", "format", "png", "--resampleWidth", "32", &icns, "--out", &tmp])
+        .output().ok()?.status.success();
+    if !ok { return None; }
+
+    let mut f = std::fs::File::open(&tmp).ok()?;
+    let mut bytes = Vec::new();
+    f.read_to_end(&mut bytes).ok()?;
+    let _ = std::fs::remove_file(&tmp);
+    Some(format!("data:image/png;base64,{}", base64_encode(&bytes)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn resolve_app_icon(_app_path: &str) -> Option<String> { None }
 
 // ---------------------------------------------------------------------------
 // Store helpers
@@ -462,39 +541,45 @@ fn do_launch_mode(
     let mut new_pids: Vec<(u32, String)> = Vec::new();
 
     for (i, entry) in mode.apps.iter().enumerate() {
-        // Skip already-running instances of non-browser apps.
-        if !is_browser(&entry.path) && is_process_running(&entry.path) {
-            results.push(AppLaunchResult {
-                name: entry.name.clone(),
-                error: None,
-                skipped: true,
-                pid: None,
-            });
-            continue;
-        }
-
-        match launch_app(entry) {
-            Ok(pid) => {
-                // Only track non-zero PIDs (0 = unknown, e.g. macOS open wrapper).
-                if pid > 0 {
-                    new_pids.push((pid, entry.name.clone()));
+        // Determine the result for this app.
+        let result = if !is_browser(&entry.path) && is_process_running(&entry.path) {
+            AppLaunchResult { name: entry.name.clone(), error: None, skipped: true, pid: None }
+        } else {
+            match launch_app(entry) {
+                Ok(pid) => {
+                    if pid > 0 { new_pids.push((pid, entry.name.clone())); }
+                    AppLaunchResult {
+                        name: entry.name.clone(),
+                        error: None,
+                        skipped: false,
+                        pid: if pid > 0 { Some(pid) } else { None },
+                    }
                 }
-                results.push(AppLaunchResult {
-                    name: entry.name.clone(),
-                    error: None,
-                    skipped: false,
-                    pid: if pid > 0 { Some(pid) } else { None },
-                });
-            }
-            Err(e) => {
-                results.push(AppLaunchResult {
+                Err(e) => AppLaunchResult {
                     name: entry.name.clone(),
                     error: Some(e.to_string()),
                     skipped: false,
                     pid: None,
-                });
+                },
             }
-        }
+        };
+
+        // Emit real-time progress event so the frontend can update per-app status.
+        let (status_str, err_str) = if result.skipped {
+            ("skipped".to_string(), None)
+        } else if let Some(ref e) = result.error {
+            ("failed".to_string(), Some(e.clone()))
+        } else {
+            ("launched".to_string(), None)
+        };
+        let _ = app.emit("launch-progress", LaunchProgressPayload {
+            mode_id: mode_id.to_string(),
+            name: result.name.clone(),
+            status: status_str,
+            error: err_str,
+        });
+
+        results.push(result);
 
         // Apply per-mode stagger delay between launches (not after the last app).
         if mode.delay_ms > 0 && i + 1 < mode.apps.len() {
@@ -618,6 +703,21 @@ fn validate_app_paths(apps: Vec<AppEntry>) -> Vec<String> {
         .filter(|a| !std::path::Path::new(&a.path).exists())
         .map(|a| a.id)
         .collect()
+}
+
+#[tauri::command]
+fn get_app_icon(path: String, app: tauri::AppHandle) -> Option<String> {
+    let cache = app.state::<IconCache>();
+    // Return cached result (including cached None) if available.
+    {
+        let guard = cache.0.lock().unwrap();
+        if let Some(cached) = guard.get(&path) {
+            return cached.clone();
+        }
+    }
+    let result = resolve_app_icon(&path);
+    cache.0.lock().unwrap().insert(path, result.clone());
+    result
 }
 
 // ---------------------------------------------------------------------------
@@ -1007,12 +1107,14 @@ pub fn run() {
             get_modes, save_modes, launch_mode, stop_mode,
             scan_apps, validate_app_paths, export_modes, import_modes,
             get_autostart, set_autostart, set_global_shortcut,
+            get_app_icon,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
 
             // Register in-memory PID tracking state.
             app.manage(ActivePids(Mutex::new(HashMap::new())));
+            app.manage(IconCache(Mutex::new(HashMap::new())));
 
             let icon = app.default_window_icon().cloned()
                 .expect("no default window icon configured");

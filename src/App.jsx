@@ -14,6 +14,7 @@ export default function App() {
   const [showAddMode, setShowAddMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pendingScanModeId, setPendingScanModeId] = useState(null);
+  const [invalidAppIds, setInvalidAppIds] = useState(new Set());
 
   useEffect(() => {
     Promise.all([getModes(), getPreferences()]).then(([m, p]) => {
@@ -22,6 +23,15 @@ export default function App() {
       setLoading(false);
     });
   }, []);
+
+  // Validate all app paths whenever modes change — runs on load and after any edit.
+  useEffect(() => {
+    const allApps = modes.flatMap((m) => m.apps);
+    if (allApps.length === 0) { setInvalidAppIds(new Set()); return; }
+    invoke("validate_app_paths", { apps: allApps })
+      .then((ids) => setInvalidAppIds(new Set(ids)))
+      .catch(() => {});
+  }, [modes]);
 
   // Refresh modes when the backend emits a modes-updated event
   // (e.g. after usage_count / last_launched is updated on launch).
@@ -146,7 +156,13 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 overflow-y-auto flex flex-col">
         {view === "home" ? (
-          <HomeView modes={modes} hideOnLaunch={preferences.hideOnLaunch} onOpenSettings={() => { setView("settings"); setShowAddMode(true); }} />
+          <HomeView
+            modes={modes}
+            hideOnLaunch={preferences.hideOnLaunch}
+            onOpenSettings={() => setView("settings")}
+            onAddMode={() => setShowAddMode(true)}
+            invalidAppIds={invalidAppIds}
+          />
         ) : (
           <SettingsView
             modes={modes}

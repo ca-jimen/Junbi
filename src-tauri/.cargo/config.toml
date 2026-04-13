@@ -1,5 +1,5 @@
-# Redirect build artifacts to a non-OneDrive path.
-# Windows Application Control blocks execution of compiled build scripts
-# in cloud-synced directories (OneDrive), so we build to a local path instead.
-[build]
-target-dir = "C:/cargo-target/junbi"
+# Cargo configuration for Junbi.
+#
+# Platform-specific settings (e.g. Windows build artifact redirection) are
+# handled in scripts/tauri.js via environment variables so that a single
+# config file works on all operating systems without manual overrides.

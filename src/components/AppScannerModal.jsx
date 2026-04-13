@@ -9,13 +9,23 @@ function isBrowser(path) {
   return BROWSER_NAMES.some((b) => lower.includes(b));
 }
 
-export default function AppScannerModal({ onAdd, onClose, modeName }) {
+export default function AppScannerModal({ onAdd, onClose, modeName, existingApps = [] }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [apps, setApps] = useState([]);
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState(new Set());
-  const [browserUrls, setBrowserUrls] = useState({}); // { [path]: string[] }
+  // Pre-select apps already in the mode so the user can see what's been added.
+  const [selected, setSelected] = useState(
+    () => new Set(existingApps.map((a) => a.path))
+  );
+  // Pre-populate browser URL state from existing apps.
+  const [browserUrls, setBrowserUrls] = useState(
+    () => Object.fromEntries(
+      existingApps
+        .filter((a) => isBrowser(a.path) && a.args?.length > 0)
+        .map((a) => [a.path, [...a.args]])
+    )
+  ); // { [path]: string[] }
 
   useEffect(() => {
     invoke("scan_apps")
@@ -71,8 +81,9 @@ export default function AppScannerModal({ onAdd, onClose, modeName }) {
   }
 
   function handleAdd() {
+    const existingPaths = new Set(existingApps.map((a) => a.path));
     const toAdd = apps
-      .filter((a) => selected.has(a.path))
+      .filter((a) => selected.has(a.path) && !existingPaths.has(a.path))
       .map((a) => {
         const urls = (browserUrls[a.path] || []).map((u) => u.trim()).filter(Boolean);
         return { id: crypto.randomUUID(), name: a.name, path: a.path, args: urls };

@@ -206,6 +206,7 @@ export default function AddModeModal({ onAdd, onSave, onClose, mode }) {
           modeName={name}
           onAdd={handleAddApp}
           onClose={() => setShowScanner(false)}
+          existingApps={apps}
         />
       )}
     </>

@@ -140,34 +140,56 @@ export default function SettingsView({
   }
 
   // ---- drag-and-drop mode reordering ----
+  // Uses pointer capture so events are reliably delivered to the drag handle
+  // even when the cursor moves outside it, then uses getBoundingClientRect
+  // for hit-testing — both required for Tauri's WKWebView on macOS.
 
-  function handleDragStart(e, index) {
+  function startDrag(e, index) {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    // Capture the pointer: all future pointermove/pointerup for this pointer
+    // are sent to `handle` regardless of what element is under the cursor.
+    handle.setPointerCapture(e.pointerId);
     setDragIndex(index);
-    e.dataTransfer.effectAllowed = "move";
-  }
 
-  function handleDragOver(e, index) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (overIndex !== index) setOverIndex(index);
-  }
-
-  function handleDrop(e, index) {
-    e.preventDefault();
-    if (dragIndex !== null && dragIndex !== index) {
-      const next = [...localModes];
-      const [removed] = next.splice(dragIndex, 1);
-      next.splice(index, 0, removed);
-      setLocalModes(next);
-      onSave(next);
+    function getCardIndex(clientY) {
+      const cards = document.querySelectorAll("[data-mode-index]");
+      for (const card of cards) {
+        const rect = card.getBoundingClientRect();
+        if (clientY >= rect.top && clientY <= rect.bottom) {
+          return parseInt(card.dataset.modeIndex, 10);
+        }
+      }
+      return null;
     }
-    setDragIndex(null);
-    setOverIndex(null);
-  }
 
-  function handleDragEnd() {
-    setDragIndex(null);
-    setOverIndex(null);
+    function onMove(ev) {
+      const idx = getCardIndex(ev.clientY);
+      if (idx !== null) setOverIndex(idx);
+    }
+
+    function onUp(ev) {
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.releasePointerCapture(ev.pointerId);
+
+      const dropIdx = getCardIndex(ev.clientY);
+      setDragIndex(null);
+      setOverIndex(null);
+
+      if (dropIdx !== null && dropIdx !== index) {
+        setLocalModes((prev) => {
+          const next = [...prev];
+          const [removed] = next.splice(index, 1);
+          next.splice(dropIdx, 0, removed);
+          onSave(next);
+          return next;
+        });
+      }
+    }
+
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
   }
 
   // ---- autostart ----
@@ -194,11 +216,7 @@ export default function SettingsView({
       {localModes.map((mode, index) => (
         <div
           key={mode.id}
-          draggable
-          onDragStart={(e) => handleDragStart(e, index)}
-          onDragOver={(e) => handleDragOver(e, index)}
-          onDrop={(e) => handleDrop(e, index)}
-          onDragEnd={handleDragEnd}
+          data-mode-index={index}
           className={`rounded-xl bg-white/5 overflow-hidden transition-colors border ${
             overIndex === index && dragIndex !== index
               ? "border-indigo-500 bg-indigo-500/5"
@@ -208,6 +226,7 @@ export default function SettingsView({
           <div className="flex items-center gap-3 px-4 py-3">
             {/* Drag handle */}
             <span
+              onPointerDown={(e) => startDrag(e, index)}
               className="shrink-0 text-white/20 hover:text-white/60 cursor-grab active:cursor-grabbing select-none text-base px-0.5"
               title="Drag to reorder"
             >
@@ -410,6 +429,7 @@ export default function SettingsView({
           onAdd={(apps) => handleAddApp(scanForMode, apps)}
           onClose={() => setScanForMode(null)}
           modeName={localModes.find((m) => m.id === scanForMode)?.name}
+          existingApps={localModes.find((m) => m.id === scanForMode)?.apps ?? []}
         />
       )}
     </div>
