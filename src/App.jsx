@@ -1,11 +1,13 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { getModes, saveModes, getPreferences, savePreferences } from "./store";
 import HomeView from "./components/HomeView";
 import SettingsView from "./components/SettingsView";
 import AddModeModal from "./components/AddModeModal";
+import Toast from "./components/Toast";
 import logo from "./assets/logo.svg";
 
 export default function App() {
@@ -16,6 +18,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [pendingScanModeId, setPendingScanModeId] = useState(null);
   const [invalidAppIds, setInvalidAppIds] = useState(new Set());
+  const [toasts, setToasts] = useState([]);
   useEffect(() => {
     Promise.all([getModes(), getPreferences()]).then(([m, p]) => {
       setModes(m);
@@ -49,6 +52,33 @@ export default function App() {
     let unlisten;
     listen("modes-updated", () => {
       getModes().then(setModes);
+    }).then((fn) => { unlisten = fn; });
+    return () => { if (unlisten) unlisten(); };
+  }, []);
+
+  // Request OS notification permission once on startup.
+  useEffect(() => {
+    isPermissionGranted().then((granted) => {
+      if (!granted) requestPermission();
+    });
+  }, []);
+
+  // Show an in-app toast + OS notification whenever the session timer fires.
+  useEffect(() => {
+    let unlisten;
+    listen("session-timer-expired", async () => {
+      setToasts((prev) => [...prev, { id: Date.now() }]);
+      // Fire a system notification so the user is alerted even if the app is
+      // minimized or they're in another window.
+      try {
+        const granted = await isPermissionGranted();
+        if (granted) {
+          sendNotification({
+            title: "Session Timer — Time's up!",
+            body: "Your focus session has ended. Take a break.",
+          });
+        }
+      } catch (_) {}
     }).then((fn) => { unlisten = fn; });
     return () => { if (unlisten) unlisten(); };
   }, []);
@@ -208,6 +238,22 @@ export default function App() {
 
       {showAddMode && (
         <AddModeModal onAdd={handleAddMode} onClose={() => setShowAddMode(false)} />
+      )}
+
+      {/* Toast notification stack — fixed top-right, above everything */}
+      {toasts.length > 0 && (
+        <div className="fixed top-5 right-5 z-50 flex flex-col gap-3 pointer-events-none">
+          {toasts.map((t) => (
+            <div key={t.id} className="pointer-events-auto">
+              <Toast
+                id={t.id}
+                message="Session Timer — Time's up!"
+                subtext="Your focus session has ended. Take a break."
+                onDismiss={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+              />
+            </div>
+          ))}
+        </div>
       )}
 
     </div>

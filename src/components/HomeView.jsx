@@ -129,7 +129,9 @@ export default function HomeView({ modes, hideOnLaunch, showStoicQuotes = true, 
           {/* Timer card */}
           {showTimer && (
             <div className="flex-1 min-w-64 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-5 py-4">
-              <p className="text-xs font-semibold text-gray-500 dark:text-white/40 uppercase tracking-wide mb-3">Timer</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-500 dark:text-white/40 uppercase tracking-wide">Timer</p>
+              </div>
               {timerEndAt ? (
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-mono text-indigo-600 dark:text-indigo-400 flex-1 tabular-nums">

@@ -946,16 +946,32 @@ fn start_session_timer(duration_secs: u64, app: tauri::AppHandle) -> Result<(), 
             if std::time::Instant::now() >= deadline {
                 let timers_c = app_c.state::<ModeTimers>();
                 timers_c.0.lock().unwrap().remove(SESSION_TIMER_KEY);
-                // Dispatch the notification on the main thread so macOS
-                // UNUserNotificationCenter receives it from the right context.
-                let n_app = app_c.clone();
-                let _ = app_c.run_on_main_thread(move || {
-                    let _ = n_app.notification()
+
+                // macOS: UNUserNotificationCenter requires the call to come
+                // from the main thread, so we dispatch there.
+                // Windows/Linux: WinRT/libnotify are thread-safe; calling
+                // run_on_main_thread can silently drop the callback when the
+                // window is minimized, so we send directly from this thread.
+                #[cfg(target_os = "macos")]
+                {
+                    let n_app = app_c.clone();
+                    let _ = app_c.run_on_main_thread(move || {
+                        let _ = n_app.notification()
+                            .builder()
+                            .title("Session Timer — Time's up!")
+                            .body("Your focus session has ended. Take a break.")
+                            .show();
+                    });
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let _ = app_c.notification()
                         .builder()
-                        .title("⏱ Session Timer — Time's up!")
-                        .body("Your focus session has ended.")
+                        .title("Session Timer — Time's up!")
+                        .body("Your focus session has ended. Take a break.")
                         .show();
-                });
+                }
+
                 let _ = app_c.emit("session-timer-expired", ());
                 return;
             }
@@ -963,6 +979,18 @@ fn start_session_timer(duration_secs: u64, app: tauri::AppHandle) -> Result<(), 
     });
 
     Ok(())
+}
+
+/// Fires a test notification immediately and returns the error string if it fails.
+/// Used by the settings UI to verify that OS notifications are working.
+#[tauri::command]
+fn test_notification(app: tauri::AppHandle) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title("Junbi — Test Notification")
+        .body("Notifications are working correctly!")
+        .show()
+        .map_err(|e| e.to_string())
 }
 
 /// Cancels the active session timer.  Safe to call when none is running.
@@ -1198,7 +1226,7 @@ pub fn run() {
             scan_apps, validate_app_paths, export_modes, import_modes,
             get_autostart, set_autostart, set_global_shortcut,
             get_app_icon,
-            start_session_timer, cancel_session_timer,
+            start_session_timer, cancel_session_timer, test_notification,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
