@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+
+  <!-- Background: vermillion -->
+  <rect width="512" height="512" rx="96" fill="#7A1C0E"/>
+
+  <!-- Kasagi (top crossbeam with upswept ends) -->
+  <path d="M 96,238 L 96,198 L 136,214 L 376,214 L 416,198 L 416,238 Z" fill="#FDF0EA"/>
+
+  <!-- Left pillar -->
+  <rect x="148" y="238" width="36" height="188" rx="5" fill="#FDF0EA"/>
+
+  <!-- Right pillar -->
+  <rect x="328" y="238" width="36" height="188" rx="5" fill="#FDF0EA"/>
+
+  <!-- Nuki (lower crossbeam) -->
+  <rect x="116" y="292" width="280" height="22" rx="4" fill="#C84020"/>
+
+  <!-- Amber diamond crown -->
+  <polygon points="256,168 286,198 256,228 226,198" fill="#F0A020"/>
+
+  <!-- Subtle amber ring -->
+  <circle cx="256" cy="198" r="38" fill="none" stroke="#F0A020" stroke-width="2" opacity="0.2"/>
+
+</svg>

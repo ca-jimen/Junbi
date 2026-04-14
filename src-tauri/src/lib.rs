@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{Emitter, Manager};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
@@ -26,6 +27,15 @@ struct ActivePids(Mutex<HashMap<String, Vec<(u32, String)>>>);
 /// Caches base64 PNG data-URLs for app icons, keyed by app path.
 /// A stored `None` means the path was tried and no icon was found.
 struct IconCache(Mutex<HashMap<String, Option<String>>>);
+
+/// Tracks which mode IDs have been launched (and not yet stopped) during this
+/// Junbi process lifetime.  Used to restore the Stop button after the window
+/// is reopened from the menu bar.
+struct ActiveModes(Mutex<HashSet<String>>);
+
+/// Active countdown timers, keyed by mode_id.  The value is a cancel flag;
+/// setting it to `true` signals the timer thread to exit without firing.
+struct ModeTimers(Mutex<HashMap<String, Arc<AtomicBool>>>);
 
 // ---------------------------------------------------------------------------
 // Data structures
@@ -595,6 +605,11 @@ fn do_launch_mode(
     // Determine overall outcome.
     let mode_ready = results.iter().any(|r| r.error.is_none());
 
+    // Track this mode as active so the Stop button survives window close/reopen.
+    if mode_ready {
+        app.state::<ActiveModes>().0.lock().unwrap().insert(mode_id.to_string());
+    }
+
     // Update usage stats in the store.
     modes[mode_idx].usage_count += 1;
     modes[mode_idx].last_launched = std::time::SystemTime::now()
@@ -624,7 +639,10 @@ fn do_launch_mode(
             (l, s) => format!("{l} launched, {s} already running"),
         };
         let title = format!("{} {}", mode.icon, mode.name);
-        let _ = app.notification().builder().title(&title).body(&body).show();
+        let n_app = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            let _ = n_app.notification().builder().title(&title).body(&body).show();
+        });
     }
 
     Ok(results)
@@ -645,6 +663,9 @@ fn launch_mode(
 
 #[tauri::command]
 fn stop_mode(mode_id: String, app: tauri::AppHandle) -> Result<Vec<AppStopResult>, String> {
+    // Remove from the active-modes set so the Stop button resets after window reopen.
+    app.state::<ActiveModes>().0.lock().unwrap().remove(&mode_id);
+
     let active_pids = app.state::<ActivePids>();
 
     // Atomically remove and retrieve the tracked PIDs for this mode.
@@ -675,6 +696,14 @@ fn stop_mode(mode_id: String, app: tauri::AppHandle) -> Result<Vec<AppStopResult
         let stopped = stop_app(entry);
         AppStopResult { name: entry.name.clone(), stopped }
     }).collect())
+}
+
+/// Returns the IDs of all modes that were launched (and not yet stopped) during
+/// this Junbi process session.  The frontend calls this on mount to restore the
+/// Stop button state after the window is reopened from the menu bar.
+#[tauri::command]
+fn get_running_mode_ids(app: tauri::AppHandle) -> Vec<String> {
+    app.state::<ActiveModes>().0.lock().unwrap().iter().cloned().collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -884,6 +913,67 @@ fn restore_window(window: &tauri::WebviewWindow) {
     let _ = window.unminimize();
     let _ = window.show();
     let _ = window.set_focus();
+}
+
+// ---------------------------------------------------------------------------
+// Session timer
+// ---------------------------------------------------------------------------
+
+/// Key used in ModeTimers for the single global session timer.
+const SESSION_TIMER_KEY: &str = "__session__";
+
+/// Starts a global session countdown.  When `duration_secs` elapses, fires an
+/// OS notification and emits `session-timer-expired`.  Calling this while a
+/// timer is already running replaces it.
+#[tauri::command]
+fn start_session_timer(duration_secs: u64, app: tauri::AppHandle) -> Result<(), String> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    {
+        let timers = app.state::<ModeTimers>();
+        let mut map = timers.0.lock().unwrap();
+        if let Some(old) = map.get(SESSION_TIMER_KEY) {
+            old.store(true, Ordering::Relaxed);
+        }
+        map.insert(SESSION_TIMER_KEY.to_string(), cancel.clone());
+    }
+
+    let app_c = app.clone();
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(duration_secs);
+        loop {
+            if cancel.load(Ordering::Relaxed) { return; }
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            if std::time::Instant::now() >= deadline {
+                let timers_c = app_c.state::<ModeTimers>();
+                timers_c.0.lock().unwrap().remove(SESSION_TIMER_KEY);
+                // Dispatch the notification on the main thread so macOS
+                // UNUserNotificationCenter receives it from the right context.
+                let n_app = app_c.clone();
+                let _ = app_c.run_on_main_thread(move || {
+                    let _ = n_app.notification()
+                        .builder()
+                        .title("⏱ Session Timer — Time's up!")
+                        .body("Your focus session has ended.")
+                        .show();
+                });
+                let _ = app_c.emit("session-timer-expired", ());
+                return;
+            }
+        }
+    });
+
+    Ok(())
+}
+
+/// Cancels the active session timer.  Safe to call when none is running.
+#[tauri::command]
+fn cancel_session_timer(app: tauri::AppHandle) -> Result<(), String> {
+    let timers = app.state::<ModeTimers>();
+    let mut map = timers.0.lock().unwrap();
+    if let Some(flag) = map.remove(SESSION_TIMER_KEY) {
+        flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1104,10 +1194,11 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
-            get_modes, save_modes, launch_mode, stop_mode,
+            get_modes, save_modes, launch_mode, stop_mode, get_running_mode_ids,
             scan_apps, validate_app_paths, export_modes, import_modes,
             get_autostart, set_autostart, set_global_shortcut,
             get_app_icon,
+            start_session_timer, cancel_session_timer,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -1115,6 +1206,18 @@ pub fn run() {
             // Register in-memory PID tracking state.
             app.manage(ActivePids(Mutex::new(HashMap::new())));
             app.manage(IconCache(Mutex::new(HashMap::new())));
+            app.manage(ActiveModes(Mutex::new(HashSet::new())));
+            app.manage(ModeTimers(Mutex::new(HashMap::new())));
+
+            // Request OS notification permission.  Must be done off the main
+            // thread on macOS (UNUserNotificationCenter.requestAuthorization
+            // is async and would deadlock if called synchronously here).
+            {
+                let ah = app_handle.clone();
+                std::thread::spawn(move || {
+                    let _ = ah.notification().request_permission();
+                });
+            }
 
             let icon = app.default_window_icon().cloned()
                 .expect("no default window icon configured");

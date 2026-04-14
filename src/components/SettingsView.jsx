@@ -217,17 +217,17 @@ export default function SettingsView({
         <div
           key={mode.id}
           data-mode-index={index}
-          className={`rounded-xl bg-white/5 overflow-hidden transition-colors border ${
+          className={`rounded-xl bg-black/5 dark:bg-white/5 overflow-hidden transition-colors border ${
             overIndex === index && dragIndex !== index
               ? "border-indigo-500 bg-indigo-500/5"
-              : "border-white/10"
+              : "border-black/10 dark:border-white/10"
           } ${dragIndex === index ? "opacity-40" : ""}`}
         >
           <div className="flex items-center gap-3 px-4 py-3">
             {/* Drag handle */}
             <span
               onPointerDown={(e) => startDrag(e, index)}
-              className="shrink-0 text-white/20 hover:text-white/60 cursor-grab active:cursor-grabbing select-none text-base px-0.5"
+              className="shrink-0 text-gray-300 dark:text-white/20 hover:text-gray-600 dark:hover:text-white/60 cursor-grab active:cursor-grabbing select-none text-base px-0.5"
               title="Drag to reorder"
             >
               ⠿
@@ -237,40 +237,40 @@ export default function SettingsView({
               className="flex items-center gap-3 flex-1 min-w-0 text-left"
             >
               <span className="text-2xl">{mode.icon}</span>
-              <span className="text-white font-medium">{mode.name}</span>
-              <span className="text-white/40 text-sm ml-1">
+              <span className="text-gray-900 dark:text-white font-medium">{mode.name}</span>
+              <span className="text-gray-400 dark:text-white/40 text-sm ml-1">
                 {mode.apps.length > 0 ? `${mode.apps.length} app${mode.apps.length !== 1 ? "s" : ""}` : "No apps"}
               </span>
-              <span className="ml-auto text-white/30 text-sm">
+              <span className="ml-auto text-gray-400 dark:text-white/30 text-sm">
                 {expandedId === mode.id ? "▲" : "▼"}
               </span>
             </button>
             <button
               onClick={() => handleDuplicateMode(mode)}
-              className="shrink-0 text-white/20 hover:text-white transition-colors text-sm leading-none px-1"
+              className="shrink-0 text-gray-300 dark:text-white/20 hover:text-gray-700 dark:hover:text-white transition-colors text-sm leading-none px-1"
               title="Duplicate mode"
             >
               ⊕
             </button>
             <button
               onClick={() => setEditingMode(mode)}
-              className="shrink-0 text-white/20 hover:text-white transition-colors text-sm leading-none px-1"
+              className="shrink-0 text-gray-300 dark:text-white/20 hover:text-gray-700 dark:hover:text-white transition-colors text-sm leading-none px-1"
               title="Edit mode"
             >
               ✎
             </button>
             {confirmDeleteId === mode.id ? (
               <div className="flex items-center gap-1 shrink-0">
-                <span className="text-xs text-white/50 mr-1">Delete?</span>
+                <span className="text-xs text-gray-500 dark:text-white/50 mr-1">Delete?</span>
                 <button
                   onClick={() => { handleDeleteMode(mode.id); setConfirmDeleteId(null); }}
-                  className="text-xs text-red-400 hover:text-red-300 transition-colors px-1"
+                  className="text-xs text-red-500 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 transition-colors px-1"
                 >
                   Yes
                 </button>
                 <button
                   onClick={() => setConfirmDeleteId(null)}
-                  className="text-xs text-white/30 hover:text-white transition-colors px-1"
+                  className="text-xs text-gray-400 dark:text-white/30 hover:text-gray-700 dark:hover:text-white transition-colors px-1"
                 >
                   No
                 </button>
@@ -278,7 +278,7 @@ export default function SettingsView({
             ) : (
               <button
                 onClick={() => setConfirmDeleteId(mode.id)}
-                className="shrink-0 text-white/20 hover:text-red-400 transition-colors text-xl leading-none"
+                className="shrink-0 text-gray-300 dark:text-white/20 hover:text-red-500 dark:hover:text-red-400 transition-colors text-xl leading-none"
                 title="Delete mode"
               >
                 ×
@@ -287,9 +287,9 @@ export default function SettingsView({
           </div>
 
           {expandedId === mode.id && (
-            <div className="border-t border-white/10 px-4 pb-4 pt-3 flex flex-col gap-2">
+            <div className="border-t border-black/10 dark:border-white/10 px-4 pb-4 pt-3 flex flex-col gap-2">
               {mode.apps.length === 0 && (
-                <p className="text-white/30 text-sm">No apps yet.</p>
+                <p className="text-gray-400 dark:text-white/30 text-sm">No apps yet.</p>
               )}
               {mode.apps.map((app, appIndex) => (
                 <AppRow
@@ -305,22 +305,22 @@ export default function SettingsView({
               <div className="mt-1 flex gap-2">
                 <button
                   onClick={() => setAddAppForMode(mode.id)}
-                  className="flex-1 rounded-lg border border-dashed border-white/20 hover:border-indigo-500 text-white/40 hover:text-indigo-400 py-2 text-sm transition-colors"
+                  className="flex-1 rounded-lg border border-dashed border-black/15 dark:border-white/20 hover:border-indigo-500 text-gray-400 dark:text-white/40 hover:text-indigo-500 dark:hover:text-indigo-400 py-2 text-sm transition-colors"
                 >
                   + Add Manually
                 </button>
                 <button
                   onClick={() => setScanForMode(mode.id)}
-                  className="flex-1 rounded-lg border border-dashed border-white/20 hover:border-indigo-500 text-white/40 hover:text-indigo-400 py-2 text-sm transition-colors"
+                  className="flex-1 rounded-lg border border-dashed border-black/15 dark:border-white/20 hover:border-indigo-500 text-gray-400 dark:text-white/40 hover:text-indigo-500 dark:hover:text-indigo-400 py-2 text-sm transition-colors"
                 >
                   Browse Installed
                 </button>
               </div>
 
               {/* Per-mode settings */}
-              <div className="mt-1 pt-2 border-t border-white/5 flex flex-col gap-2">
+              <div className="mt-1 pt-2 border-t border-black/5 dark:border-white/5 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-white/40 flex-1">Delay between apps</label>
+                  <label className="text-xs text-gray-500 dark:text-white/40 flex-1">Delay between apps</label>
                   <input
                     type="number"
                     min="0"
@@ -328,18 +328,18 @@ export default function SettingsView({
                     step="100"
                     value={mode.delay_ms ?? 0}
                     onChange={(e) => handleUpdateDelay(mode.id, Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-20 rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1 text-sm outline-none focus:border-indigo-500 text-right"
+                    className="w-20 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-900 dark:text-white px-2 py-1 text-sm outline-none focus:border-indigo-500 text-right"
                   />
-                  <span className="text-xs text-white/30">ms</span>
+                  <span className="text-xs text-gray-400 dark:text-white/30">ms</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-white/40 flex-1">Hotkey</label>
+                  <label className="text-xs text-gray-500 dark:text-white/40 flex-1">Hotkey</label>
                   <input
                     type="text"
                     defaultValue={mode.hotkey ?? ""}
                     onBlur={(e) => handleUpdateHotkey(mode.id, e.target.value.trim())}
                     placeholder="e.g. Ctrl+Shift+W"
-                    className="w-36 rounded-lg bg-white/5 border border-white/10 text-white px-2 py-1 text-sm outline-none focus:border-indigo-500 font-mono placeholder-white/20"
+                    className="w-36 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-900 dark:text-white px-2 py-1 text-sm outline-none focus:border-indigo-500 font-mono placeholder-gray-400 dark:placeholder-white/20"
                   />
                 </div>
               </div>
@@ -350,8 +350,8 @@ export default function SettingsView({
 
       {/* Preferences */}
       {preferences && (
-        <div className="rounded-xl bg-white/5 border border-white/10 px-5 py-4 mt-1">
-          <p className="text-xs text-white/30 uppercase tracking-wider mb-4">Preferences</p>
+        <div className="rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-5 py-4 mt-1">
+          <p className="text-xs text-gray-400 dark:text-white/30 uppercase tracking-wider mb-4">Preferences</p>
           <div className="flex flex-col gap-4">
 
             {/* Minimize on launch */}
@@ -363,8 +363,8 @@ export default function SettingsView({
                 className="mt-0.5 accent-indigo-500 w-4 h-4 cursor-pointer"
               />
               <div>
-                <p className="text-sm text-white leading-snug">Minimize window on launch</p>
-                <p className="text-xs text-white/40 mt-0.5">
+                <p className="text-sm text-gray-900 dark:text-white leading-snug">Minimize window on launch</p>
+                <p className="text-xs text-gray-500 dark:text-white/40 mt-0.5">
                   Minimizes Junbi to the taskbar when a mode is launched.
                 </p>
               </div>
@@ -380,29 +380,61 @@ export default function SettingsView({
                   className="mt-0.5 accent-indigo-500 w-4 h-4 cursor-pointer"
                 />
                 <div>
-                  <p className="text-sm text-white leading-snug">Launch on startup</p>
-                  <p className="text-xs text-white/40 mt-0.5">
+                  <p className="text-sm text-gray-900 dark:text-white leading-snug">Launch on startup</p>
+                  <p className="text-xs text-gray-500 dark:text-white/40 mt-0.5">
                     Start Junbi automatically when you log in.
                   </p>
                 </div>
               </label>
             )}
 
+            {/* Stoic quotes on launch */}
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={preferences.showStoicQuotes ?? true}
+                onChange={(e) => onSavePreferences({ ...preferences, showStoicQuotes: e.target.checked })}
+                className="mt-0.5 accent-indigo-500 w-4 h-4 cursor-pointer"
+              />
+              <div>
+                <p className="text-sm text-gray-900 dark:text-white leading-snug">Show stoic quote on launch</p>
+                <p className="text-xs text-gray-500 dark:text-white/40 mt-0.5">
+                  Display an inspiring stoic quote each time you launch a mode.
+                </p>
+              </div>
+            </label>
+
+            {/* Session timer */}
+            <label className="flex items-start gap-3 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={preferences.showTimer ?? true}
+                onChange={(e) => onSavePreferences({ ...preferences, showTimer: e.target.checked })}
+                className="mt-0.5 accent-indigo-500 w-4 h-4 cursor-pointer"
+              />
+              <div>
+                <p className="text-sm text-gray-900 dark:text-white leading-snug">Show session timer</p>
+                <p className="text-xs text-gray-500 dark:text-white/40 mt-0.5">
+                  Display a countdown timer above your modes to time your focus sessions.
+                </p>
+              </div>
+            </label>
+
             {/* Global shortcut */}
             <div>
-              <p className="text-sm text-white leading-snug mb-1">Global shortcut</p>
-              <p className="text-xs text-white/40 mb-2">
-                Open Junbi from anywhere. Format: <span className="text-white/60">Ctrl+Shift+J</span>
+              <p className="text-sm text-gray-900 dark:text-white leading-snug mb-1">Global shortcut</p>
+              <p className="text-xs text-gray-500 dark:text-white/40 mb-2">
+                Open Junbi from anywhere. Format: <span className="text-gray-600 dark:text-white/60">Ctrl+Shift+J</span>
               </p>
               <input
                 type="text"
                 defaultValue={preferences.globalShortcut ?? ""}
                 onBlur={handleShortcutBlur}
                 placeholder="e.g. Ctrl+Shift+J — leave blank to disable"
-                className="w-full rounded-lg bg-white/5 border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+                className="w-full rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-900 dark:text-white px-3 py-2 text-sm outline-none focus:border-indigo-500 placeholder-gray-400 dark:placeholder-white/30"
               />
               {shortcutError && (
-                <p className="text-xs text-red-400 mt-1">{shortcutError}</p>
+                <p className="text-xs text-red-500 dark:text-red-400 mt-1">{shortcutError}</p>
               )}
             </div>
 

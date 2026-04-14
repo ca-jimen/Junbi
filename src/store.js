@@ -32,10 +32,19 @@ export async function saveModes(modes) {
   await store.save();
 }
 
+const PREFERENCE_DEFAULTS = {
+  hideOnLaunch: true,
+  globalShortcut: "",
+  theme: "dark",
+  showStoicQuotes: true,
+  showTimer: true,
+};
+
 export async function getPreferences() {
   const store = await getStore();
   const prefs = await store.get("preferences");
-  return prefs ?? { hideOnLaunch: true, globalShortcut: "" };
+  // Merge with defaults so new keys always appear even for existing users.
+  return { ...PREFERENCE_DEFAULTS, ...(prefs ?? {}) };
 }
 
 export async function savePreferences(prefs) {
