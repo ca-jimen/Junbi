@@ -46,7 +46,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
     : (urls.length === 0 ? "Add a parameter" : "Add another parameter");
 
   return (
-    <div className={`rounded-lg overflow-hidden ${invalid ? "bg-red-500/10 border border-red-500/20" : "bg-white/5"}`}>
+    <div className={`rounded-lg overflow-hidden ${invalid ? "bg-red-500/10 border border-red-500/20" : "bg-black/5 dark:bg-white/5"}`}>
       {/* Main row */}
       <div className="flex items-center gap-3 px-4 py-3">
         {/* Reorder buttons */}
@@ -56,7 +56,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
               type="button"
               onClick={onMoveUp}
               disabled={!onMoveUp}
-              className="text-white/20 hover:text-white disabled:opacity-0 disabled:pointer-events-none transition-colors text-xs leading-none"
+              className="text-gray-300 dark:text-white/20 hover:text-gray-700 dark:hover:text-white disabled:opacity-0 disabled:pointer-events-none transition-colors text-xs leading-none"
             >
               ▲
             </button>
@@ -64,7 +64,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
               type="button"
               onClick={onMoveDown}
               disabled={!onMoveDown}
-              className="text-white/20 hover:text-white disabled:opacity-0 disabled:pointer-events-none transition-colors text-xs leading-none"
+              className="text-gray-300 dark:text-white/20 hover:text-gray-700 dark:hover:text-white disabled:opacity-0 disabled:pointer-events-none transition-colors text-xs leading-none"
             >
               ▼
             </button>
@@ -72,19 +72,19 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <p className="text-sm font-medium text-white truncate">{app.name}</p>
+            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{app.name}</p>
             {invalid && (
-              <span className="shrink-0 text-xs text-red-400" title="App not found at this path">⚠</span>
+              <span className="shrink-0 text-xs text-red-500 dark:text-red-400" title="App not found at this path">⚠</span>
             )}
           </div>
-          <p className="text-xs text-white/40 truncate">{app.path}</p>
+          <p className="text-xs text-gray-500 dark:text-white/40 truncate">{app.path}</p>
         </div>
 
         {/* Args toggle — show count if collapsed, hide label if expanded */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 text-xs text-indigo-400/70 hover:text-indigo-300 transition-colors px-1"
+          className="shrink-0 text-xs text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors px-1"
           title={expanded ? `Hide ${argLabelPlural}` : `Edit ${argLabelPlural}`}
         >
           {expanded
@@ -97,7 +97,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
         <button
           type="button"
           onClick={() => onDelete(app.id)}
-          className="shrink-0 text-white/30 hover:text-red-400 transition-colors text-lg leading-none"
+          className="shrink-0 text-gray-400 dark:text-white/30 hover:text-red-500 dark:hover:text-red-400 transition-colors text-lg leading-none"
           title="Remove app"
         >
           ×
@@ -106,7 +106,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
 
       {/* Inline args editor */}
       {expanded && (
-        <div className="border-t border-white/5 px-4 pb-3 pt-2 flex flex-col gap-2">
+        <div className="border-t border-black/5 dark:border-white/5 px-4 pb-3 pt-2 flex flex-col gap-2">
           {urls.map((url, i) => (
             <div key={i} className="flex gap-2">
               <input
@@ -114,12 +114,12 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
                 onChange={(e) => updateUrl(i, e.target.value)}
                 onBlur={() => commitUrl(i)}
                 placeholder={argPlaceholder}
-                className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 text-white px-3 py-1.5 text-sm outline-none focus:border-indigo-500"
+                className="flex-1 min-w-0 rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-white/20 px-3 py-1.5 text-sm outline-none focus:border-indigo-500"
               />
               <button
                 type="button"
                 onClick={() => removeUrl(i)}
-                className="shrink-0 w-7 flex items-center justify-center text-white/30 hover:text-red-400 transition-colors text-lg leading-none"
+                className="shrink-0 w-7 flex items-center justify-center text-gray-400 dark:text-white/30 hover:text-red-500 dark:hover:text-red-400 transition-colors text-lg leading-none"
               >
                 ×
               </button>
@@ -128,7 +128,7 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
           <button
             type="button"
             onClick={addUrl}
-            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-white/15 hover:border-indigo-500 text-white/30 hover:text-indigo-400 py-1.5 text-xs transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-black/15 dark:border-white/15 hover:border-indigo-500 text-gray-400 dark:text-white/30 hover:text-indigo-600 dark:hover:text-indigo-400 py-1.5 text-xs transition-colors"
           >
             <span className="text-sm leading-none">+</span>
             <span>{addLabel}</span>
