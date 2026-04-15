@@ -7,6 +7,7 @@ use tauri::{Emitter, Manager};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_store::StoreExt;
 
 /// The label Tauri assigns to the main window when none is set in tauri.conf.json.
@@ -177,7 +178,37 @@ fn resolve_app_icon(app_path: &str) -> Option<String> {
     Some(format!("data:image/png;base64,{}", base64_encode(&bytes)))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn resolve_app_icon(app_path: &str) -> Option<String> {
+    // Only extract icons from files that exist on disk (not URL entries).
+    if app_path.contains("://") { return None; }
+    if !std::path::Path::new(app_path).exists() { return None; }
+
+    // Escape single quotes in the path for embedding in a PowerShell single-quoted string.
+    let escaped = app_path.replace('\'', "''");
+    let ps = format!(
+        "try {{ \
+           Add-Type -AssemblyName System.Drawing; \
+           $icon = [System.Drawing.Icon]::ExtractAssociatedIcon('{}'); \
+           if (-not $icon) {{ exit 1 }}; \
+           $bmp = $icon.ToBitmap(); \
+           $ms = New-Object System.IO.MemoryStream; \
+           $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); \
+           [Convert]::ToBase64String($ms.ToArray()) \
+         }} catch {{ exit 1 }}",
+        escaped
+    );
+    let out = silent_cmd("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &ps])
+        .output()
+        .ok()?;
+    if !out.status.success() { return None; }
+    let b64 = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if b64.is_empty() { return None; }
+    Some(format!("data:image/png;base64,{}", b64))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn resolve_app_icon(_app_path: &str) -> Option<String> { None }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +392,7 @@ fn is_process_running(exe_path: &str) -> bool {
             .unwrap_or("")
             .to_lowercase();
         if exe_name.is_empty() { return false; }
-        return Command::new("tasklist")
+        return silent_cmd("tasklist")
             .args(["/FI", &format!("IMAGENAME eq {}", exe_name), "/NH", "/FO", "CSV"])
             .output()
             .ok()
@@ -391,6 +422,31 @@ fn is_process_running(exe_path: &str) -> bool {
 // Process killing
 // ---------------------------------------------------------------------------
 
+/// Returns true if the process with the given PID is still running.
+/// A pid of 0 always returns false (unknown PID sentinel).
+fn is_pid_alive(pid: u32) -> bool {
+    if pid == 0 { return false; }
+
+    #[cfg(target_os = "windows")]
+    {
+        return silent_cmd("tasklist")
+            .args(["/FI", &format!("PID eq {}", pid), "/NH", "/FO", "CSV"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).contains(&pid.to_string()))
+            .unwrap_or(false);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // `kill -0` succeeds if the process exists, fails otherwise.
+        return Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+    }
+}
+
 /// Kill a process by PID.  Returns true if the kill command succeeded.
 /// A pid of 0 is a no-op (indicates an unknown PID).
 fn kill_by_pid(pid: u32) -> bool {
@@ -398,7 +454,7 @@ fn kill_by_pid(pid: u32) -> bool {
 
     #[cfg(target_os = "windows")]
     {
-        return Command::new("taskkill")
+        return silent_cmd("taskkill")
             .args(["/F", "/PID", &pid.to_string()])
             .output()
             .map(|o| o.status.success())
@@ -429,7 +485,7 @@ fn stop_app(entry: &AppEntry) -> bool {
             .and_then(|n| n.to_str())
             .unwrap_or(entry.name.as_str())
             .to_string();
-        return Command::new("taskkill")
+        return silent_cmd("taskkill")
             .args(["/F", "/IM", &exe_name])
             .output()
             .map(|o| o.status.success())
@@ -477,12 +533,49 @@ fn find_app_binary(app_path: &str) -> Option<String> {
 // Launch
 // ---------------------------------------------------------------------------
 
+/// Creates a `Command` that will NOT spawn a visible console window when called
+/// from a Windows GUI process.  All internal utility invocations (tasklist,
+/// taskkill, powershell, reg …) must go through this so the user never sees
+/// a console flash and Windows Application Control does not flag the spawn.
+#[cfg(target_os = "windows")]
+fn silent_cmd(program: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut cmd = Command::new(program);
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    cmd
+}
+
+/// Splits each arg string on ASCII whitespace so that a single field value like
+/// "-applaunch 1091500" becomes two tokens: ["-applaunch", "1091500"].
+fn split_args(args: &[String]) -> Vec<String> {
+    args.iter()
+        .flat_map(|a| a.split_ascii_whitespace().map(str::to_owned))
+        .collect()
+}
+
+/// Returns true when the path is a URL (e.g. `steam://rungameid/12345`).
+fn is_url(path: &str) -> bool {
+    path.contains("://")
+}
+
 /// Launch a single app entry and return its PID.
 ///
 /// Returns `Ok(0)` when the PID cannot be determined (e.g. macOS .app bundles
 /// launched via the `open` wrapper — the `open` process PID is unrelated to
 /// the actual application PID).
-fn launch_app(entry: &AppEntry) -> Result<u32, std::io::Error> {
+fn launch_app(entry: &AppEntry, app: &tauri::AppHandle) -> Result<u32, std::io::Error> {
+    // URL protocols (e.g. steam://rungameid/12345) are handed off to the OS
+    // shell so the registered protocol handler (Steam, browser, etc.) opens them.
+    if is_url(&entry.path) {
+        app.opener()
+            .open_url(&entry.path, None::<&str>)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        return Ok(0);
+    }
+
+    let args = split_args(&entry.args);
+
     #[cfg(target_os = "macos")]
     if entry.path.ends_with(".app") {
         let kind = browser_kind(&entry.path);
@@ -491,24 +584,24 @@ fn launch_app(entry: &AppEntry) -> Result<u32, std::io::Error> {
                 if let Some(binary) = find_app_binary(&entry.path) {
                     let mut cmd = Command::new(&binary);
                     if let Some(flag) = new_window_arg(&kind) { cmd.arg(flag); }
-                    cmd.args(&entry.args);
+                    cmd.args(&args);
                     return cmd.spawn().map(|child| child.id());
                 }
                 let mut cmd = Command::new("open");
                 cmd.arg(&entry.path).arg("--args");
                 if let Some(flag) = new_window_arg(&kind) { cmd.arg(flag); }
-                cmd.args(&entry.args);
+                cmd.args(&args);
                 return cmd.spawn().map(|_| 0u32);
             }
             BrowserKind::Safari => {
                 return Command::new("open")
-                    .arg("-n").arg(&entry.path).args(&entry.args)
+                    .arg("-n").arg(&entry.path).args(&args)
                     .spawn().map(|_| 0u32);
             }
             BrowserKind::Other => {
                 let mut cmd = Command::new("open");
                 cmd.arg(&entry.path);
-                if !entry.args.is_empty() { cmd.args(&entry.args); }
+                if !args.is_empty() { cmd.args(&args); }
                 return cmd.spawn().map(|_| 0u32);
             }
         }
@@ -520,9 +613,9 @@ fn launch_app(entry: &AppEntry) -> Result<u32, std::io::Error> {
         BrowserKind::Chromium | BrowserKind::Firefox => {
             let mut cmd = Command::new(&entry.path);
             if let Some(flag) = new_window_arg(&kind) { cmd.arg(flag); }
-            cmd.args(&entry.args).spawn().map(|child| child.id())
+            cmd.args(&args).spawn().map(|child| child.id())
         }
-        _ => Command::new(&entry.path).args(&entry.args).spawn().map(|child| child.id()),
+        _ => Command::new(&entry.path).args(&args).spawn().map(|child| child.id()),
     }
 }
 
@@ -552,10 +645,10 @@ fn do_launch_mode(
 
     for (i, entry) in mode.apps.iter().enumerate() {
         // Determine the result for this app.
-        let result = if !is_browser(&entry.path) && is_process_running(&entry.path) {
+        let result = if entry.args.is_empty() && !is_url(&entry.path) && !is_browser(&entry.path) && is_process_running(&entry.path) {
             AppLaunchResult { name: entry.name.clone(), error: None, skipped: true, pid: None }
         } else {
-            match launch_app(entry) {
+            match launch_app(entry, &app) {
                 Ok(pid) => {
                     if pid > 0 { new_pids.push((pid, entry.name.clone())); }
                     AppLaunchResult {
@@ -706,6 +799,34 @@ fn get_running_mode_ids(app: tauri::AppHandle) -> Vec<String> {
     app.state::<ActiveModes>().0.lock().unwrap().iter().cloned().collect()
 }
 
+/// Returns true if at least one PID tracked for this mode is still alive.
+/// When all PIDs have exited, cleans up ActivePids and ActiveModes so state
+/// stays consistent.  Falls back to ActiveModes membership when no PIDs were
+/// captured (e.g. macOS .app bundles launched via `open`).
+#[tauri::command]
+fn check_mode_alive(mode_id: String, app: tauri::AppHandle) -> bool {
+    let active_pids = app.state::<ActivePids>();
+    let pids: Vec<u32> = {
+        let map = active_pids.0.lock().unwrap();
+        map.get(&mode_id)
+            .map(|v| v.iter().map(|(p, _)| *p).collect())
+            .unwrap_or_default()
+    };
+
+    if pids.is_empty() {
+        // No PIDs were captured — rely on ActiveModes (set to true until stop is called).
+        return app.state::<ActiveModes>().0.lock().unwrap().contains(&mode_id);
+    }
+
+    let alive = pids.iter().any(|&pid| is_pid_alive(pid));
+    if !alive {
+        // All tracked processes have died — clean up so the UI auto-reverts to Launch.
+        active_pids.0.lock().unwrap().remove(&mode_id);
+        app.state::<ActiveModes>().0.lock().unwrap().remove(&mode_id);
+    }
+    alive
+}
+
 // ---------------------------------------------------------------------------
 // Export / import
 // ---------------------------------------------------------------------------
@@ -806,7 +927,7 @@ fn scan_apps() -> Result<Vec<DiscoveredApp>, String> {
             }
             if ($results.Count -eq 0) { '[]' } elseif ($results.Count -eq 1) { "[$($results | ConvertTo-Json -Compress)]" } else { $results | Sort-Object name | ConvertTo-Json -Compress }
         "#;
-        let out = Command::new("powershell")
+        let out = silent_cmd("powershell")
             .args(["-NoProfile", "-NonInteractive", "-Command", ps])
             .output()
             .map_err(|e| format!("Failed to run PowerShell: {e}"))?;
@@ -831,7 +952,7 @@ fn scan_apps() -> Result<Vec<DiscoveredApp>, String> {
 fn get_autostart() -> bool {
     #[cfg(target_os = "windows")]
     {
-        return Command::new("reg")
+        return silent_cmd("reg")
             .args(["query", r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run", "/v", "Junbi"])
             .output()
             .map(|o| o.status.success())
@@ -850,7 +971,7 @@ fn set_autostart(enabled: bool) -> Result<(), String> {
                 .map_err(|e| e.to_string())?
                 .to_string_lossy()
                 .to_string();
-            let out = Command::new("reg")
+            let out = silent_cmd("reg")
                 .args([
                     "add",
                     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
@@ -865,7 +986,7 @@ fn set_autostart(enabled: bool) -> Result<(), String> {
                 return Err(String::from_utf8_lossy(&out.stderr).to_string());
             }
         } else {
-            let _ = Command::new("reg")
+            let _ = silent_cmd("reg")
                 .args([
                     "delete",
                     r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run",
@@ -1222,7 +1343,7 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
-            get_modes, save_modes, launch_mode, stop_mode, get_running_mode_ids,
+            get_modes, save_modes, launch_mode, stop_mode, get_running_mode_ids, check_mode_alive,
             scan_apps, validate_app_paths, export_modes, import_modes,
             get_autostart, set_autostart, set_global_shortcut,
             get_app_icon,

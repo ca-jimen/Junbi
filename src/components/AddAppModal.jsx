@@ -9,6 +9,10 @@ function isBrowser(filePath) {
   return BROWSER_NAMES.some((b) => lower.includes(b));
 }
 
+function isUrl(p) {
+  return p.includes("://");
+}
+
 export default function AddAppModal({ onAdd, onClose, modeName }) {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
@@ -33,6 +37,7 @@ export default function AddAppModal({ onAdd, onClose, modeName }) {
 
   function handlePathChange(value) {
     setPath(value);
+    if (isUrl(value)) { setUrls([]); return; }
     if (isBrowser(value) && urls.length === 0) {
       setUrls([""]);
     }
@@ -81,21 +86,23 @@ export default function AddAppModal({ onAdd, onClose, modeName }) {
               <input
                 value={path}
                 onChange={(e) => handlePathChange(e.target.value)}
-                placeholder="/Applications/App.app or C:\..."
+                placeholder="steam://rungameid/... or C:\path\to\app.exe"
                 className="flex-1 min-w-0 rounded-lg bg-white/5 border border-white/10 text-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
               />
-              <button
-                type="button"
-                onClick={handleBrowse}
-                className="shrink-0 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 px-3 py-2 text-sm transition-colors"
-              >
-                Browse
-              </button>
+              {!isUrl(path) && (
+                <button
+                  type="button"
+                  onClick={handleBrowse}
+                  className="shrink-0 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 px-3 py-2 text-sm transition-colors"
+                >
+                  Browse
+                </button>
+              )}
             </div>
           </div>
 
-          {/* URLs / launch parameters section */}
-          {(() => {
+          {/* URLs / launch parameters section — hidden for URL-protocol paths */}
+          {!isUrl(path) && (() => {
             const browser = isBrowser(path);
             const sectionLabel = browser ? "URLs to open in tabs" : "Launch parameters";
             const placeholder = browser ? "https://..." : "--flag or -arg";

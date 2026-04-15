@@ -88,6 +88,11 @@ export default function App() {
     await saveModes(updated);
   }
 
+  async function handleSaveMode(updatedMode) {
+    const updated = modes.map((m) => (m.id === updatedMode.id ? updatedMode : m));
+    await handleSaveModes(updated);
+  }
+
   async function handleSavePreferences(updated) {
     setPreferences(updated);
     await savePreferences(updated);
@@ -222,6 +227,7 @@ export default function App() {
             showTimer={preferences.showTimer ?? true}
             onOpenSettings={() => setView("settings")}
             onAddMode={() => setShowAddMode(true)}
+            onSaveMode={handleSaveMode}
             invalidAppIds={invalidAppIds}
           />
         ) : (

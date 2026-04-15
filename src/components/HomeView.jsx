@@ -5,7 +5,7 @@ import { getRandomQuote } from "../data/stoicQuotes";
 import ModeCard from "./ModeCard";
 import ModeListRow from "./ModeListRow";
 
-export default function HomeView({ modes, hideOnLaunch, showStoicQuotes = true, showTimer = true, onOpenSettings, onAddMode, invalidAppIds = new Set() }) {
+export default function HomeView({ modes, hideOnLaunch, showStoicQuotes = true, showTimer = true, onOpenSettings, onAddMode, onSaveMode, invalidAppIds = new Set() }) {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState("grid"); // "grid" | "list"
   const [currentQuote, setCurrentQuote] = useState(() => getRandomQuote(-1));
@@ -227,6 +227,7 @@ export default function HomeView({ modes, hideOnLaunch, showStoicQuotes = true, 
               hideOnLaunch={hideOnLaunch}
               colorIndex={i}
               invalidAppIds={invalidAppIds}
+              onSaveMode={onSaveMode}
             />
           ))}
           {!q && (
@@ -249,6 +250,7 @@ export default function HomeView({ modes, hideOnLaunch, showStoicQuotes = true, 
               hideOnLaunch={hideOnLaunch}
               colorIndex={i}
               invalidAppIds={invalidAppIds}
+              onSaveMode={onSaveMode}
             />
           ))}
           {!q && (

@@ -5,6 +5,9 @@ function isBrowser(path) {
   if (!path) return false;
   return BROWSER_NAMES.some((b) => path.toLowerCase().includes(b));
 }
+function isUrl(path) {
+  return path?.includes("://") ?? false;
+}
 
 export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, invalid }) {
   const [expanded, setExpanded] = useState(false);
@@ -80,19 +83,21 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
           <p className="text-xs text-gray-500 dark:text-white/40 truncate">{app.path}</p>
         </div>
 
-        {/* Args toggle — show count if collapsed, hide label if expanded */}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="shrink-0 text-xs text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors px-1"
-          title={expanded ? `Hide ${argLabelPlural}` : `Edit ${argLabelPlural}`}
-        >
-          {expanded
-            ? `hide ${argLabelPlural}`
-            : argCount > 0
-            ? `${argCount} ${argCount !== 1 ? argLabelPlural : argLabel} ✎`
-            : `+ ${argLabelPlural}`}
-        </button>
+        {/* Args toggle — hidden for URL-protocol entries (no args apply) */}
+        {!isUrl(app.path) && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="shrink-0 text-xs text-indigo-600/70 dark:text-indigo-400/70 hover:text-indigo-600 dark:hover:text-indigo-300 transition-colors px-1"
+            title={expanded ? `Hide ${argLabelPlural}` : `Edit ${argLabelPlural}`}
+          >
+            {expanded
+              ? `hide ${argLabelPlural}`
+              : argCount > 0
+              ? `${argCount} ${argCount !== 1 ? argLabelPlural : argLabel} ✎`
+              : `+ ${argLabelPlural}`}
+          </button>
+        )}
 
         <button
           type="button"
@@ -104,8 +109,8 @@ export default function AppRow({ app, onDelete, onUpdate, onMoveUp, onMoveDown, 
         </button>
       </div>
 
-      {/* Inline args editor */}
-      {expanded && (
+      {/* Inline args editor — not shown for URL-protocol entries */}
+      {!isUrl(app.path) && expanded && (
         <div className="border-t border-black/5 dark:border-white/5 px-4 pb-3 pt-2 flex flex-col gap-2">
           {urls.map((url, i) => (
             <div key={i} className="flex gap-2">

@@ -1,16 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useState, useEffect, useCallback } from "react";
+import AddModeModal from "./AddModeModal";
 
 
 const PALETTE = ["#6366f1","#10b981","#8b5cf6","#0ea5e9","#f43f5e","#f59e0b","#14b8a6","#d946ef"];
 
-export default function ModeListRow({ mode, hideOnLaunch, colorIndex = 0, invalidAppIds = new Set() }) {
+export default function ModeListRow({ mode, hideOnLaunch, colorIndex = 0, invalidAppIds = new Set(), onSaveMode }) {
   const accent = PALETTE[colorIndex % PALETTE.length];
   const [isLaunching, setIsLaunching] = useState(false);
   const [isStopping, setIsStopping]   = useState(false);
   const [isRunning,  setIsRunning]    = useState(false);
   const [launched,   setLaunched]     = useState(false);
+  const [editing,    setEditing]      = useState(false);
 
   const syncRunning = useCallback(() => {
     invoke("get_running_mode_ids")
@@ -55,6 +57,7 @@ export default function ModeListRow({ mode, hideOnLaunch, colorIndex = 0, invali
   }
 
   return (
+    <>
     <div className="relative flex items-center gap-4 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 hover:bg-black/10 dark:hover:bg-white/10 transition-colors overflow-hidden pl-5 pr-4 py-3">
       {/* Left accent stripe */}
       <div className="absolute left-0 top-0 bottom-0 w-1" style={{ background: accent }} />
@@ -82,6 +85,15 @@ export default function ModeListRow({ mode, hideOnLaunch, colorIndex = 0, invali
 
       {/* Buttons */}
       <div className="flex gap-2 shrink-0">
+        {onSaveMode && (
+          <button
+            onClick={() => setEditing(true)}
+            title="Edit mode"
+            className="rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-gray-400 dark:text-white/40 hover:text-gray-700 dark:hover:text-white py-1.5 px-2.5 text-xs transition-colors"
+          >
+            ✎
+          </button>
+        )}
         <button
           onClick={handleLaunch}
           disabled={appCount === 0 || isLaunching || isStopping}
@@ -98,6 +110,16 @@ export default function ModeListRow({ mode, hideOnLaunch, colorIndex = 0, invali
           {isStopping ? "…" : "■"}
         </button>
       </div>
+
     </div>
+
+    {editing && (
+      <AddModeModal
+        mode={mode}
+        onSave={(updated) => { onSaveMode(updated); setEditing(false); }}
+        onClose={() => setEditing(false)}
+      />
+    )}
+    </>
   );
 }

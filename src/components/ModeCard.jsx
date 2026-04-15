@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useState, useEffect, useRef, useCallback } from "react";
+import AddModeModal from "./AddModeModal";
 
 /** Format a Unix timestamp (seconds, as a string) into a human-readable "last used" label. */
 function formatLastLaunched(ts) {
@@ -18,8 +19,9 @@ function formatLastLaunched(ts) {
 
 const PALETTE = ["#6366f1","#10b981","#8b5cf6","#0ea5e9","#f43f5e","#f59e0b","#14b8a6","#d946ef"];
 
-export default function ModeCard({ mode, hideOnLaunch, colorIndex = 0, invalidAppIds = new Set() }) {
+export default function ModeCard({ mode, hideOnLaunch, colorIndex = 0, invalidAppIds = new Set(), onSaveMode }) {
   const accent      = PALETTE[colorIndex % PALETTE.length];
+  const [editing,      setEditing]      = useState(false);
   const [status,       setStatus]       = useState(null);
   const [isRunning,    setIsRunning]     = useState(false);
   // null = idle, [] = launch in progress (accumulating per-app events)
@@ -51,12 +53,24 @@ export default function ModeCard({ mode, hideOnLaunch, colorIndex = 0, invalidAp
     return () => { if (unlisten) unlisten(); };
   }, [syncRunning]);
 
+  // While running, poll the backend every 3s to detect when all tracked PIDs
+  // have exited so the button automatically reverts to Launch.
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = setInterval(() => {
+      invoke("check_mode_alive", { modeId: mode.id })
+        .then((alive) => { if (!alive) setIsRunning(false); })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(id);
+  }, [isRunning, mode.id]);
+
   // Load app icons lazily when the mode's app list changes.
   const appPathsKey = mode.apps.map((a) => a.path).join("|");
   useEffect(() => {
     let cancelled = false;
     mode.apps.forEach((app) => {
-      if (!app.path.endsWith(".app")) return;
+      if (app.path.includes("://")) return;
       invoke("get_app_icon", { path: app.path })
         .then((icon) => {
           if (!cancelled) setIcons((prev) => ({ ...prev, [app.path]: icon ?? null }));
@@ -118,20 +132,30 @@ export default function ModeCard({ mode, hideOnLaunch, colorIndex = 0, invalidAp
   const hasBadPaths  = mode.apps.some((a) => invalidAppIds.has(a.id));
 
   return (
+    <>
     <div
       className="group relative w-52 flex flex-col rounded-2xl bg-black/5 dark:bg-white/5 border overflow-hidden hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
       style={{ borderColor: `${accent}55` }}
     >
-      {/* Usage badge — absolute, shown on hover only, contributes zero height */}
-      {(mode.usage_count > 0 || lastLaunched) && (
-        <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-          <span className="text-xs text-gray-500 dark:text-white/50 bg-black/10 dark:bg-black/50 rounded px-1.5 py-0.5 backdrop-blur-sm">
+      {/* Top-right hover overlay: edit button + usage badge */}
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex flex-col items-end gap-1">
+        {onSaveMode && (
+          <button
+            onClick={() => setEditing(true)}
+            title="Edit mode"
+            className="text-xs text-gray-500 dark:text-white/40 hover:text-gray-900 dark:hover:text-white bg-black/10 dark:bg-black/50 hover:bg-black/20 dark:hover:bg-black/70 rounded px-1.5 py-0.5 backdrop-blur-sm transition-colors leading-none"
+          >
+            ✎
+          </button>
+        )}
+        {(mode.usage_count > 0 || lastLaunched) && (
+          <span className="text-xs text-gray-500 dark:text-white/50 bg-black/10 dark:bg-black/50 rounded px-1.5 py-0.5 backdrop-blur-sm pointer-events-none">
             {mode.usage_count > 0 && `${mode.usage_count}×`}
             {mode.usage_count > 0 && lastLaunched && " · "}
             {lastLaunched}
           </span>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Invalid-paths warning badge */}
       {hasBadPaths && (
@@ -236,23 +260,17 @@ export default function ModeCard({ mode, hideOnLaunch, colorIndex = 0, invalidAp
             </p>
           )}
 
-          <div className="flex gap-2">
-            <button
-              onClick={handleLaunch}
-              disabled={appCount === 0 || isLaunching || isStopping}
-              className="flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-black/10 dark:disabled:bg-white/10 disabled:text-gray-400 dark:disabled:text-white/30 disabled:cursor-not-allowed text-white font-medium py-2 px-3 text-sm transition-colors"
-            >
-              {isLaunching ? "Launching…" : status?.ok ? "Launched!" : "Launch"}
-            </button>
-            <button
-              onClick={handleStop}
-              disabled={!isRunning || isLaunching || isStopping}
-              title="Stop all apps in this mode"
-              className="rounded-xl bg-black/10 dark:bg-white/10 hover:bg-red-500/30 hover:text-red-500 dark:hover:text-red-300 disabled:opacity-30 disabled:cursor-not-allowed text-gray-500 dark:text-white/60 py-2 px-3 text-sm transition-colors"
-            >
-              {isStopping ? "…" : "■"}
-            </button>
-          </div>
+          <button
+            onClick={isRunning ? handleStop : handleLaunch}
+            disabled={appCount === 0 || isLaunching || isStopping}
+            className={`w-full rounded-xl font-medium py-2 px-3 text-sm transition-colors disabled:bg-black/10 dark:disabled:bg-white/10 disabled:text-gray-400 dark:disabled:text-white/30 disabled:cursor-not-allowed text-white ${
+              isRunning
+                ? "bg-red-600 hover:bg-red-500"
+                : "bg-indigo-600 hover:bg-indigo-500"
+            }`}
+          >
+            {isLaunching ? "Launching…" : isStopping ? "Stopping…" : isRunning ? "Stop" : status?.ok ? "Launched!" : "Launch"}
+          </button>
 
           {/* Skipped apps notice */}
           {status?.ok && skippedNames.length > 0 && (
@@ -285,5 +303,13 @@ export default function ModeCard({ mode, hideOnLaunch, colorIndex = 0, invalidAp
       </div>
     </div>
 
+    {editing && (
+      <AddModeModal
+        mode={mode}
+        onSave={(updated) => { onSaveMode(updated); setEditing(false); }}
+        onClose={() => setEditing(false)}
+      />
+    )}
+    </>
   );
 }
