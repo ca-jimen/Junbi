@@ -828,6 +828,94 @@ fn check_mode_alive(mode_id: String, app: tauri::AppHandle) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Running apps dashboard
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct RunningAppInfo {
+    pub mode_id: String,
+    pub mode_name: String,
+    pub mode_icon: String,
+    pub app_name: String,
+    pub pid: u32,
+}
+
+/// Returns every app in every active mode, regardless of whether individual
+/// PIDs are still alive.  Uses ActiveModes as the source of truth so that
+/// short-lived launcher processes (e.g. Steam) don't make the panel disappear.
+/// PIDs from ActivePids are attached when present; otherwise 0 is used.
+#[tauri::command]
+fn get_running_apps(app: tauri::AppHandle) -> Vec<RunningAppInfo> {
+    let active_mode_ids: HashSet<String> = {
+        app.state::<ActiveModes>().0.lock().unwrap().clone()
+    };
+    if active_mode_ids.is_empty() { return vec![]; }
+
+    let pid_map: HashMap<String, Vec<(u32, String)>> = {
+        app.state::<ActivePids>().0.lock().unwrap().clone()
+    };
+
+    let store = match app.store("junbi.json") {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+    let modes: Vec<Mode> = store
+        .get("modes")
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+
+    let mut results: Vec<RunningAppInfo> = Vec::new();
+    for mode_id in &active_mode_ids {
+        let mode = match modes.iter().find(|m| &m.id == mode_id) {
+            Some(m) => m,
+            None => continue,
+        };
+        let tracked_pids = pid_map.get(mode_id).cloned().unwrap_or_default();
+        for app_entry in &mode.apps {
+            // Find a tracked PID for this app by matching app_name (best effort).
+            let pid = tracked_pids
+                .iter()
+                .find(|(_, name)| name == &app_entry.name)
+                .map(|(p, _)| *p)
+                .unwrap_or(0);
+            results.push(RunningAppInfo {
+                mode_id: mode_id.clone(),
+                mode_name: mode.name.clone(),
+                mode_icon: mode.icon.clone(),
+                app_name: app_entry.name.clone(),
+                pid,
+            });
+        }
+    }
+    results.sort_by(|a, b| a.mode_name.cmp(&b.mode_name).then(a.app_name.cmp(&b.app_name)));
+    results
+}
+
+/// Kill a single tracked process by PID and remove it from state.
+/// Emits `modes-updated` so every card refreshes.
+#[tauri::command]
+fn kill_running_app(pid: u32, mode_id: String, app: tauri::AppHandle) -> bool {
+    let killed = kill_by_pid(pid);
+    // Remove PID from tracking regardless of whether the kill succeeded —
+    // if the process was already gone the PID is stale either way.
+    let no_pids_left = {
+        let active_pids = app.state::<ActivePids>();
+        let mut map = active_pids.0.lock().unwrap();
+        if let Some(pids) = map.get_mut(&mode_id) {
+            pids.retain(|(p, _)| *p != pid);
+            pids.is_empty()
+        } else {
+            true
+        }
+    };
+    if no_pids_left {
+        app.state::<ActiveModes>().0.lock().unwrap().remove(&mode_id);
+    }
+    let _ = app.emit("modes-updated", ());
+    killed
+}
+
+// ---------------------------------------------------------------------------
 // Export / import
 // ---------------------------------------------------------------------------
 
@@ -1344,6 +1432,7 @@ pub fn run() {
         )
         .invoke_handler(tauri::generate_handler![
             get_modes, save_modes, launch_mode, stop_mode, get_running_mode_ids, check_mode_alive,
+            get_running_apps, kill_running_app,
             scan_apps, validate_app_paths, export_modes, import_modes,
             get_autostart, set_autostart, set_global_shortcut,
             get_app_icon,

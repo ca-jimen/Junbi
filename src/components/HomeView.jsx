@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getRandomQuote } from "../data/stoicQuotes";
 import ModeCard from "./ModeCard";
 import ModeListRow from "./ModeListRow";
+import RunningAppsPanel from "./RunningAppsPanel";
 
 export default function HomeView({ modes, hideOnLaunch, showStoicQuotes = true, showTimer = true, onOpenSettings, onAddMode, onSaveMode, invalidAppIds = new Set() }) {
   const [search, setSearch] = useState("");
@@ -111,105 +112,124 @@ export default function HomeView({ modes, hideOnLaunch, showStoicQuotes = true, 
 
   return (
     <div className="flex flex-col flex-1">
-      {/* Quote + timer row — side by side when wide enough, stacked when narrow */}
+      {/* View toggle — sits above info cards */}
+      <div className="flex justify-end px-8 pt-5">
+        <div className="flex gap-1">
+          <ViewBtn value="grid" label="▦" />
+          <ViewBtn value="list" label="≡" />
+        </div>
+      </div>
+
+      {/* Quote + timer cards — fixed-width, centred, same visual language as mode cards */}
       {(showStoicQuotes || showTimer) && (
-        <div className="mx-6 mt-5 flex flex-wrap gap-3">
+        <div className="flex flex-wrap justify-center gap-4 px-6 mt-3">
 
           {/* Stoic quote card */}
           {showStoicQuotes && currentQuote && (
-            <div className="flex-1 min-w-64 rounded-xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/15 dark:border-indigo-400/15 px-5 py-4">
-              <p className="text-sm text-gray-700 dark:text-white/80 leading-relaxed italic">"{currentQuote.quote}"</p>
-              <p className="mt-2 text-xs text-indigo-600 dark:text-indigo-400/80 font-medium">
-                — {currentQuote.author}
-                <span className="text-gray-400 dark:text-white/30 font-normal"> · {currentQuote.period}</span>
-              </p>
+            <div className="w-72 flex flex-col rounded-2xl bg-black/5 dark:bg-white/5 border border-indigo-500/20 dark:border-indigo-400/15 overflow-hidden">
+              <div className="w-full h-0.5 shrink-0 bg-indigo-500/70" />
+              <div className="flex flex-col flex-1 px-5 pt-4 pb-5 gap-3">
+                <p className="text-xs font-semibold text-indigo-500 dark:text-indigo-400/70 uppercase tracking-wider">
+                  Daily Stoic
+                </p>
+                <div className="flex gap-2 flex-1">
+                  <span className="text-indigo-400/40 dark:text-indigo-400/30 text-4xl font-serif leading-none mt-0.5 select-none">"</span>
+                  <p className="text-sm text-gray-700 dark:text-white/75 leading-relaxed italic flex-1">
+                    {currentQuote.quote}
+                  </p>
+                </div>
+                <p className="text-xs text-indigo-600 dark:text-indigo-400/80 font-medium">
+                  — {currentQuote.author}
+                  <span className="text-gray-400 dark:text-white/30 font-normal"> · {currentQuote.period}</span>
+                </p>
+              </div>
             </div>
           )}
 
           {/* Timer card */}
           {showTimer && (
-            <div className="flex-1 min-w-64 rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 px-5 py-4">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold text-gray-500 dark:text-white/40 uppercase tracking-wide">Timer</p>
-              </div>
-              {timerEndAt ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-mono text-indigo-600 dark:text-indigo-400 flex-1 tabular-nums">
-                    ⏱ {timerDisplay}
-                  </span>
-                  <button
-                    onClick={handleCancelTimer}
-                    className="text-xs text-gray-400 dark:text-white/30 hover:text-red-500 dark:hover:text-red-400 transition-colors px-1.5 py-0.5 rounded-md hover:bg-red-500/10"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : timerDone ? (
-                <p className="text-sm text-emerald-500 dark:text-emerald-400 font-medium">Session complete!</p>
-              ) : (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[25, 50, 90].map((m) => (
+            <div className="w-64 flex flex-col rounded-2xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 overflow-hidden">
+              <div className="w-full h-0.5 shrink-0 bg-emerald-500/70" />
+              <div className="flex flex-col flex-1 px-5 pt-4 pb-5">
+                <p className="text-xs font-semibold text-gray-500 dark:text-white/40 uppercase tracking-wider mb-4">
+                  Session Timer
+                </p>
+
+                {timerEndAt ? (
+                  <div className="flex flex-col items-center gap-3 py-1">
+                    <span className="text-3xl font-mono font-bold text-indigo-600 dark:text-indigo-400 tabular-nums tracking-tight">
+                      {timerDisplay}
+                    </span>
                     <button
-                      key={m}
-                      onClick={() => handleStartTimer(m)}
-                      className="text-xs rounded-lg bg-black/5 dark:bg-white/5 hover:bg-indigo-500/15 hover:text-indigo-600 dark:hover:text-indigo-400 text-gray-500 dark:text-white/40 px-2.5 py-1 transition-colors"
+                      onClick={handleCancelTimer}
+                      className="text-xs text-gray-400 dark:text-white/30 hover:text-red-500 dark:hover:text-red-400 transition-colors px-3 py-1 rounded-lg hover:bg-red-500/10"
                     >
-                      {m}m
+                      Cancel
                     </button>
-                  ))}
-                  <input
-                    type="number"
-                    min="1"
-                    max="480"
-                    value={timerInput}
-                    onChange={(e) => setTimerInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleStartTimer(parseInt(timerInput, 10))}
-                    placeholder="min"
-                    className="w-16 text-xs text-center rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-700 dark:text-white/60 py-1 px-2 outline-none focus:border-indigo-500 placeholder-gray-300 dark:placeholder-white/20"
-                  />
-                  <button
-                    onClick={() => handleStartTimer(parseInt(timerInput, 10))}
-                    disabled={!timerInput || parseInt(timerInput, 10) < 1}
-                    className="text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 disabled:cursor-not-allowed text-white py-1 px-2.5 transition-colors"
-                  >
-                    Start
-                  </button>
-                </div>
-              )}
+                  </div>
+                ) : timerDone ? (
+                  <div className="flex items-center gap-2 py-1">
+                    <span className="text-emerald-500 dark:text-emerald-400">✓</span>
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">Session complete!</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {/* Quick-start presets */}
+                    <div className="flex gap-1.5">
+                      {[25, 50, 90].map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => handleStartTimer(m)}
+                          className="flex-1 text-xs rounded-lg bg-black/5 dark:bg-white/5 hover:bg-emerald-500/15 hover:text-emerald-600 dark:hover:text-emerald-400 text-gray-500 dark:text-white/40 py-1.5 transition-colors font-medium"
+                        >
+                          {m}m
+                        </button>
+                      ))}
+                    </div>
+                    {/* Custom duration */}
+                    <div className="flex gap-1.5 justify-center">
+                      <input
+                        type="number"
+                        min="1"
+                        max="480"
+                        value={timerInput}
+                        onChange={(e) => setTimerInput(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleStartTimer(parseInt(timerInput, 10))}
+                        placeholder="min"
+                        className="w-16 text-xs text-center rounded-lg bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-700 dark:text-white/60 py-1.5 px-2 outline-none focus:border-emerald-500 placeholder-gray-300 dark:placeholder-white/20"
+                      />
+                      <button
+                        onClick={() => handleStartTimer(parseInt(timerInput, 10))}
+                        disabled={!timerInput || parseInt(timerInput, 10) < 1}
+                        className="text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:cursor-not-allowed text-white py-1.5 px-3 transition-colors font-medium"
+                      >
+                        Start
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
         </div>
       )}
 
-      {/* Toolbar — three-column: phantom left balances the right toggle so the
-           search input is always centred regardless of which side has buttons. */}
-      <div className="flex items-center px-8 pt-4 pb-2">
-        {/* Left phantom — same buttons, invisible, just reserves matching width */}
-        <div className="flex gap-1 opacity-0 pointer-events-none" aria-hidden="true">
-          <ViewBtn value="grid" label="▦" />
-          <ViewBtn value="list" label="≡" />
-        </div>
+      {/* Running apps dashboard — only visible when apps are alive */}
+      <RunningAppsPanel />
 
-        {/* Centre: search input */}
-        <div className="flex-1 flex justify-center px-3">
-          {modes.length > 3 && (
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search modes…"
-              className="w-full max-w-xs rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-900 dark:text-white px-4 py-2 text-sm outline-none focus:border-indigo-500 placeholder-gray-400 dark:placeholder-white/30"
-            />
-          )}
+      {/* Toolbar — search input, centred */}
+      {modes.length > 3 && (
+        <div className="flex justify-center px-8 pt-4 pb-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search modes…"
+            className="w-full max-w-xs rounded-xl bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 text-gray-900 dark:text-white px-4 py-2 text-sm outline-none focus:border-indigo-500 placeholder-gray-400 dark:placeholder-white/30"
+          />
         </div>
-
-        {/* Right: actual toggle buttons */}
-        <div className="flex gap-1 shrink-0">
-          <ViewBtn value="grid" label="▦" />
-          <ViewBtn value="list" label="≡" />
-        </div>
-      </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-2 p-8 text-center">
